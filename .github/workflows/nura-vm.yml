@@ -1,0 +1,30 @@
+name: NURA VM para QEMU
+on:
+  workflow_dispatch:
+  push:
+    branches: ['integrate/nura-linux-nx591j']
+    paths: ['device/nx591j/vm/**', '.github/workflows/nura-vm.yml']
+permissions:
+  contents: read
+jobs:
+  qemu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref_name == 'main' && 'integrate/nura-linux-nx591j' || github.sha }}
+          persist-credentials: false
+      - name: Instalar QEMU e ferramentas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf genisoimage socat
+      - name: Construir disco e verificar dois boots
+        run: bash device/nx591j/vm/build-qemu.sh
+      - name: Publicar disco inicializavel
+        uses: actions/upload-artifact@v4
+        with:
+          name: nura-os-qemu-x86_64
+          path: nura-vm/
+          compression-level: 0
+          if-no-files-found: error
