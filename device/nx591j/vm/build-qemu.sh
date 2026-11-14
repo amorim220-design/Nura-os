@@ -24,11 +24,14 @@ tar -czf nura.tgz -C payload .
 printf 'instance-id: nura-vm\nlocal-hostname: nura-vm\n' >meta-data
 cat >user-data <<'EOF'
 #cloud-config
+apt:
+  preserve_sources_list: true
 package_update: true
 packages:
   - xserver-xorg-core
   - xserver-xorg-input-libinput
   - xinit
+  - openbox
   - python3-cairo
   - python3-tk
   - python3-pil.imagetk
@@ -38,7 +41,7 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/sh
-      exec /usr/sbin/runuser -u nura -- /usr/bin/python3 -B /opt/nura/vm/nura-desktop.py
+      exec /usr/sbin/runuser -u nura -- /bin/sh -c '/usr/bin/openbox & exec /usr/bin/python3 -B /opt/nura/vm/nura-desktop.py'
   - path: /etc/systemd/system/nura-vm.service
     permissions: '0644'
     content: |
@@ -47,8 +50,8 @@ write_files:
       After=systemd-user-sessions.service
 
       [Service]
-      RuntimeDirectory=nura-vm
-      ExecStartPre=/usr/bin/chown nura:nura /run/nura-vm
+      ExecStartPre=/usr/bin/install -d -m 0700 -o nura -g nura /run/nura-vm
+      ExecStartPre=/usr/bin/rm -f /run/nura-vm/ready
       ExecStart=/usr/bin/xinit /usr/local/bin/nura-vm-session -- /usr/bin/Xorg :0 vt7 -keeptty -nolisten tcp -ac
       StandardOutput=journal+console
       StandardError=journal+console
@@ -67,7 +70,11 @@ runcmd:
 EOF
 genisoimage -quiet -output seed.iso -volid cidata -joliet -rock user-data meta-data nura.tgz
 
-qemu-system-x86_64 -m 3072 -smp 4 -machine q35 -cpu max \
+accel=(-accel tcg -cpu max)
+if [[ -c /dev/kvm ]] && sudo chmod a+rw /dev/kvm; then
+  accel=(-accel kvm -cpu host)
+fi
+qemu-system-x86_64 "${accel[@]}" -m 3072 -smp 4 -machine q35 \
   -drive "if=pflash,format=raw,readonly=on,file=$out/OVMF_CODE_4M.fd" \
   -drive "if=pflash,format=raw,file=$out/OVMF_VARS_4M.fd" \
   -drive if=virtio,format=qcow2,file=work.qcow2 \
@@ -77,7 +84,7 @@ qemu-system-x86_64 -m 3072 -smp 4 -machine q35 -cpu max \
 pid=$!
 
 wait_for_desktop() {
-  for ((i=0;i<240;i++)); do
+  for ((i=0;i<420;i++)); do
     if grep -q NURA_VM_READY serial.log 2>/dev/null; then return; fi
     kill -0 "$pid"
     sleep 3
@@ -94,6 +101,7 @@ poweroff_vm() {
   return 1
 }
 wait_for_desktop
+echo "First boot rendered the desktop"
 poweroff_vm
 qemu-img convert -c -O qcow2 work.qcow2 "$out/nura-os.qcow2"
 qemu-img check "$out/nura-os.qcow2"
@@ -102,7 +110,7 @@ qemu-img check "$out/nura-os.qcow2"
 qemu-img create -f qcow2 -F qcow2 -b "$out/nura-os.qcow2" smoke.qcow2
 cp /usr/share/OVMF/OVMF_VARS_4M.fd smoke-vars.fd
 rm -f serial.log monitor.sock
-qemu-system-x86_64 -m 3072 -smp 4 -machine q35 -cpu max \
+qemu-system-x86_64 "${accel[@]}" -m 3072 -smp 4 -machine q35 \
   -drive "if=pflash,format=raw,readonly=on,file=$out/OVMF_CODE_4M.fd" \
   -drive if=pflash,format=raw,file=smoke-vars.fd \
   -drive if=virtio,format=qcow2,file=smoke.qcow2 \
@@ -110,6 +118,7 @@ qemu-system-x86_64 -m 3072 -smp 4 -machine q35 -cpu max \
   -display none -serial file:serial.log -monitor unix:monitor.sock,server,nowait &
 pid=$!
 wait_for_desktop
+echo "Exported disk booted and rendered the desktop"
 poweroff_vm
 cp /usr/share/OVMF/OVMF_VARS_4M.fd "$out/OVMF_VARS_4M.fd"
 cat >"$out/README.txt" <<'EOF'
