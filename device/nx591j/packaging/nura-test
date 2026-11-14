@@ -1,0 +1,106 @@
+#!/bin/sh
+# Sessao manual com retorno automatico ao teclado e ao desktop anteriores.
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo 'Use: sudo nura-test' >&2
+    exit 1
+fi
+
+if [ "${1:-}" != '--session' ]; then
+    user=${SUDO_USER:-dev}
+    exec /usr/bin/systemd-run --unit=nura-manual --collect \
+        /usr/bin/nura-test --session "$user"
+fi
+
+user=$2
+if [ "$(id -u "$user")" -eq 0 ]; then
+    echo 'O teste precisa de um usuario comum.' >&2
+    exit 1
+fi
+
+restore=''
+paused=''
+vt=''
+vt_mode=''
+set_vt_mode() {
+    /usr/bin/python3 -B - "$@" <<'PY'
+import array
+import fcntl
+import sys
+
+with open(sys.argv[1], 'rb', buffering=0) as tty:
+    if len(sys.argv) == 2:
+        mode = array.array('i', [0])
+        fcntl.ioctl(tty, 0x4B3B, mode)  # KDGETMODE
+        print(mode[0])
+    else:
+        fcntl.ioctl(tty, 0x4B3A, int(sys.argv[2]))  # KDSETMODE
+PY
+}
+
+process_exe() {
+    readlink "/proc/$1/exe" 2>/dev/null || true
+}
+
+restore_services() {
+    if [ -n "$vt_mode" ]; then
+        set_vt_mode "$vt" "$vt_mode" || true
+    fi
+    for entry in $paused; do
+        pid=${entry%%:*}
+        if [ "$(process_exe "$pid")" = "${entry#*:}" ]; then
+            kill -CONT "$pid" 2>/dev/null || true
+        fi
+    done
+    for unit in $restore; do
+        /usr/bin/systemctl start "$unit" || true
+    done
+}
+trap restore_services EXIT
+trap 'exit 1' HUP INT TERM
+
+for unit in nxgui.service nxkb.service buffyboard.service; do
+    if /usr/bin/systemctl is-active --quiet "$unit"; then
+        restore="$unit $restore"
+        /usr/bin/systemctl stop "$unit"
+    fi
+done
+
+# Pausa tambem os processos que iniciaram fora das unidades conhecidas.
+# O nome em /proc/PID/comm trunca matchbox-keyboard, entao use o executavel.
+for proc in /proc/[0-9]*; do
+    pid=${proc##*/}
+    exe=$(process_exe "$pid")
+    case ${exe##*/} in
+        Xorg|Xorg.wrap|matchbox-keyboard|buffyboard) ;;
+        *) continue ;;
+    esac
+    state=$(awk '/^State:/ {print $2}' "/proc/$pid/status" 2>/dev/null || true)
+    case $state in
+        ''|T|t|Z) continue ;;
+    esac
+    if kill -STOP "$pid" 2>/dev/null; then
+        paused="$pid:$exe $paused"
+        echo "[nura-test] pausado: $exe (PID $pid)"
+    fi
+done
+
+# Impede que o console pinte texto no framebuffer durante o teste.
+active=$(cat /sys/class/tty/tty0/active)
+case $active in
+    tty[0-9]*) vt="/dev/$active" ;;
+    *) echo '[nura-test] Console virtual nao identificado.' >&2; exit 1 ;;
+esac
+vt_mode=$(set_vt_mode "$vt")
+set_vt_mode "$vt" 1  # KD_GRAPHICS
+
+# O teclado antigo pode sumir junto com o terminal que iniciou o teste.
+# A sessao temporaria fica em outra unidade e encerra sozinha.
+rc=0
+/usr/bin/timeout -k 5 720 /usr/bin/runuser -u "$user" -- \
+    /usr/bin/python3 -B /usr/share/nura/src/nura_shell.py || rc=$?
+case $rc in
+    0|124|137) exit 0 ;;
+    *) exit "$rc" ;;
+esac

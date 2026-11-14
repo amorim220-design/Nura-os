@@ -1,0 +1,43 @@
+#!/sbin/openrc-run
+# NURA OS — NURA Shell (OpenRC) — alternativa ao systemd.
+# O NX591J usa systemd; este script existe para portability.
+
+name="nura-shell"
+description="NURA OS Desktop (shell nativo em paisagem)"
+
+command="/usr/bin/python3"
+command_args="/usr/share/nura/src/nura_shell.py"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/nura-shell.log"
+error_log="/var/log/nura-shell.log"
+
+depend() {
+    need localmount
+    after bootmisc
+    provide display
+}
+
+start_pre() {
+    # modo recuperacao: se a interface falhou demais, nao suba
+    if /usr/bin/python3 -c "
+import sys; sys.path.insert(0,'/usr/share/nura/src')
+import nura_recovery
+sys.exit(0 if nura_recovery.should_fallback() else 1)"; then
+        ewarn "NURA shell: falhas repetidas -> modo recuperacao (console)"
+        return 1
+    fi
+    ebegin "Tocando a animacao de boot"
+    /usr/bin/python3 /usr/share/nura/src/nura_splash.py --duration 3.2
+    eend $?
+}
+
+stop_post() {
+    /usr/bin/python3 -c "
+import sys; sys.path.insert(0,'/usr/share/nura/src')
+import nura_recovery
+n = nura_recovery.consecutive_failures()
+if n >= 3:
+    nura_recovery.disable_autostart('falhas repetidas')
+" 2>/dev/null
+}

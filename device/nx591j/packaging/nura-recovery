@@ -1,0 +1,10 @@
+#!/bin/sh
+# NURA OS — modo de recuperacao (CLI).
+# Uso:  nura-recovery status|enable|disable|backup|restore|reset|doctor
+
+exec /usr/bin/python3 -c '
+import sys
+sys.path.insert(0, "/usr/share/nura/src")
+import nura_recovery
+sys.exit(nura_recovery.main())
+' "$@"

@@ -1,0 +1,28 @@
+[Unit]
+Description=NURA OS Desktop (shell nativo em paisagem)
+Documentation=file:/usr/share/nura/docs/API-NURA.md
+After=local-fs.target systemd-udev-settle.service
+Before=getty@tty1.service
+Conflicts=getty@tty1.service
+# se o shell falhar repetidamente, nao insista: o console assume
+StartLimitBurst=3
+StartLimitIntervalSec=300
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/share/nura/src/nura_shell.py
+ExecStartPre=/usr/bin/python3 /usr/share/nura/src/nura_splash.py --duration 3.2
+Restart=on-failure
+RestartSec=3
+# se o shell cair 3 vezes, desliga o proprio auto-start (modo recuperacao)
+ExecStopPost=/bin/sh -c 'n=$(cat /var/lib/nura/state.json 2>/dev/null | grep -o "\"failures\": [0-9]*" | grep -o "[0-9]*"); [ -n "$n" ] && [ "$n" -ge 3 ] && systemctl disable nura-shell.service'
+TimeoutStopSec=5
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+# recursos: a interface nao precisa de nada de prioridade
+Nice=5
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target
