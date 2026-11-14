@@ -50,16 +50,36 @@ write_files:
       After=systemd-user-sessions.service
 
       [Service]
+      TimeoutStartSec=600
+      Restart=on-failure
+      RestartSec=5
       ExecStartPre=/usr/bin/install -d -m 0700 -o nura -g nura /run/nura-vm
       ExecStartPre=/usr/bin/rm -f /run/nura-vm/ready
       ExecStart=/usr/bin/xinit /usr/local/bin/nura-vm-session -- /usr/bin/Xorg :0 vt7 -keeptty -nolisten tcp -ac
       StandardOutput=journal+console
       StandardError=journal+console
-      ExecStartPost=/bin/sh -c 'for i in $(seq 1 60); do if [ -f /run/nura-vm/ready ]; then echo NURA_VM_READY > /dev/ttyS0; exit 0; fi; sleep 1; done; exit 1'
+      ExecStartPost=/bin/sh -c 'for i in $(seq 1 480); do if [ -f /run/nura-vm/ready ]; then echo NURA_VM_READY > /dev/ttyS0; exit 0; fi; sleep 1; done; exit 1'
 
       [Install]
       WantedBy=multi-user.target
+  - path: /usr/local/bin/nura-vm-mobile-setup
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      set -eu
+      cp -p /etc/fstab /etc/fstab.nura-original
+      # O firmware e o GRUB ja leem essas particoes antes do Linux.
+      # Se udev demorar a achar os rotulos, o desktop ainda pode iniciar.
+      awk '$1 !~ /^#/ && ($2 == "/boot" || $2 == "/boot/efi") {
+        $4 = $4 ",nofail,x-systemd.device-timeout=15s"
+        $6 = 0
+      } {print}' /etc/fstab > /etc/fstab.nura
+      cat /etc/fstab.nura > /etc/fstab
+      rm /etc/fstab.nura
+      systemctl mask --now snapd.service snapd.socket snapd.seeded.service \
+        ModemManager.service udisks2.service
 runcmd:
+  - [/usr/local/bin/nura-vm-mobile-setup]
   - [adduser, --disabled-password, --gecos, '', nura]
   - [mkdir, -p, /mnt/nura-seed, /opt/nura]
   - [mount, -o, ro, LABEL=cidata, /mnt/nura-seed]
@@ -84,7 +104,7 @@ qemu-system-x86_64 "${accel[@]}" -m 3072 -smp 4 -machine q35 \
 pid=$!
 
 wait_for_desktop() {
-  for ((i=0;i<420;i++)); do
+  for ((i=0;i<540;i++)); do
     if grep -q NURA_VM_READY serial.log 2>/dev/null; then return; fi
     kill -0 "$pid"
     sleep 3
@@ -110,7 +130,7 @@ qemu-img check "$out/nura-os.qcow2"
 qemu-img create -f qcow2 -F qcow2 -b "$out/nura-os.qcow2" smoke.qcow2
 cp /usr/share/OVMF/OVMF_VARS_4M.fd smoke-vars.fd
 rm -f serial.log monitor.sock
-qemu-system-x86_64 "${accel[@]}" -m 3072 -smp 4 -machine q35 \
+qemu-system-x86_64 -accel tcg -cpu max -m 2048 -smp 2 -machine q35 \
   -drive "if=pflash,format=raw,readonly=on,file=$out/OVMF_CODE_4M.fd" \
   -drive if=pflash,format=raw,file=smoke-vars.fd \
   -drive if=virtio,format=qcow2,file=smoke.qcow2 \
@@ -130,6 +150,10 @@ qemu-system-x86_64 -machine q35 -m 3072 -smp 4 -drive if=pflash,format=raw,reado
 
 O NURA abre automaticamente. Use mouse e teclado. Esc sai da tela cheia.
 Para desligar pelo monitor do QEMU: Ctrl+Alt+2 e system_powerdown.
+No Termux, execute na pasta extraida:
+qemu-system-x86_64 -machine q35 -accel tcg -cpu max -m 2048 -smp 2 -drive if=pflash,format=raw,readonly=on,file=OVMF_CODE_4M.fd -drive if=pflash,format=raw,file=OVMF_VARS_4M.fd -drive if=virtio,format=qcow2,file=nura-os.qcow2 -device qemu-xhci -device usb-tablet -nic none -vnc 127.0.0.1:0 -serial mon:stdio
+No AVNC, conecte a 127.0.0.1, porta 5900.
+
 O disco usa Ubuntu x86_64 e UEFI.
 O disco e para VM; o kernel e os drivers do NX591J nao fazem parte dele.
 EOF
