@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Run the NURA Linux shell in a virtual machine window."""
-import os
+import io
 import sys
 import tempfile
 import time
 import tkinter as tk
 from pathlib import Path
+
+from PIL import Image, ImageTk
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -26,8 +28,7 @@ def main():
             stream.truncate(4352 * 1920)
 
         shell = NuraShell(mock=str(fb), input_device="")
-        if os.environ.get("NURA_VM_DEMO") == "1":
-            shell.open_app("terminal")
+        ready = Path("/run/nura-vm/ready")
 
         def touch(kind, event):
             x = event.x * DESK_W // max(1, view.winfo_width())
@@ -45,13 +46,20 @@ def main():
 
         def draw():
             shell.tick()
-            output = Path(work) / "frame.png"
-            shell.surface.write_to_png(str(output))
-            frame = tk.PhotoImage(file=str(output))
-            if view.winfo_width() < DESK_W or view.winfo_height() < DESK_H:
-                frame = frame.subsample(2)
+            width, height = view.winfo_width(), view.winfo_height()
+            if width < 2 or height < 2:
+                root.after(125, draw)
+                return
+            output = io.BytesIO()
+            shell.surface.write_to_png(output)
+            output.seek(0)
+            with Image.open(output) as source:
+                frame = ImageTk.PhotoImage(source.resize((width, height),
+                                                         Image.Resampling.BILINEAR))
             view.configure(image=frame)
             view.image = frame
+            if ready.parent.is_dir() and not ready.exists():
+                ready.touch()
             root.after(125, draw)
 
         view.bind("<ButtonPress-1>", lambda e: touch("down", e))
