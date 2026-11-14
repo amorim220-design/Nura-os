@@ -1,0 +1,66 @@
+import { AppDefinition, AppId } from '../types/os';
+
+export const APPS_REGISTRY: Record<AppId, AppDefinition> = {
+  explorer: {
+    id: 'explorer',
+    name: 'NURA Explorer',
+    shortName: 'Explorer',
+    description: 'Gerenciador de arquivos virtual e diretórios Linux',
+    pinned: true,
+    defaultSize: { width: 820, height: 520 },
+    minSize: { width: 520, height: 360 },
+    category: 'Utilitários',
+  },
+  terminal: {
+    id: 'terminal',
+    name: 'NURA Terminal',
+    shortName: 'Terminal',
+    description: 'Console de comandos demonstrativo Alpine / postmarketOS',
+    pinned: true,
+    defaultSize: { width: 740, height: 470 },
+    minSize: { width: 460, height: 320 },
+    category: 'Sistema',
+  },
+  'control-center': {
+    id: 'control-center',
+    name: 'NURA Control Center',
+    shortName: 'Configurações',
+    description: 'Central de controle, conectividade simulada e temas',
+    pinned: true,
+    defaultSize: { width: 800, height: 530 },
+    minSize: { width: 540, height: 380 },
+    category: 'Sistema',
+  },
+  'game-hub': {
+    id: 'game-hub',
+    name: 'NURA Game Hub',
+    shortName: 'Game Hub',
+    description: 'Biblioteca visual de jogos e mapeamento de controle',
+    pinned: true,
+    defaultSize: { width: 880, height: 560 },
+    minSize: { width: 560, height: 400 },
+    category: 'Entretenimento',
+  },
+  performance: {
+    id: 'performance',
+    name: 'NURA Performance',
+    shortName: 'Performance',
+    description: 'Painel de telemetria demonstrativa de CPU, RAM, GPU e processos',
+    pinned: true,
+    defaultSize: { width: 840, height: 540 },
+    minSize: { width: 540, height: 380 },
+    category: 'Sistema',
+  },
+  about: {
+    id: 'about',
+    name: 'Sobre o NURA OS',
+    shortName: 'Sobre NURA',
+    description: 'Especificações do protótipo e arquitetura postmarketOS',
+    pinned: false,
+    defaultSize: { width: 620, height: 450 },
+    minSize: { width: 420, height: 320 },
+    category: 'Sistema',
+  },
+};
+
+export const ALL_APPS: AppDefinition[] = Object.values(APPS_REGISTRY);

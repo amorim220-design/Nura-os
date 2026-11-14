@@ -1,0 +1,6 @@
+{
+  "name": "NURA OS Desktop",
+  "description": "Protótipo web interativo da interface gráfica desktop do NURA OS (Alpine Linux / postmarketOS) para Nubia Z17 Lite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
