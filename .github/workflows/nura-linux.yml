@@ -54,7 +54,7 @@ jobs:
             alpine:edge sh -euxc '
               test "$(uname -m)" = aarch64
               apk update
-              apk add --no-cache font-dejavu
+              apk add --no-cache font-dejavu openrc
               cd /tmp
               sh /source/packaging/install-nura.sh
               test -x /etc/init.d/nura-shell
