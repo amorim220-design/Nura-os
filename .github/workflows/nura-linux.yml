@@ -1,0 +1,38 @@
+name: NURA Linux
+on:
+  workflow_dispatch:
+  push:
+    branches: ['integrate/nura-linux-nx591j']
+    paths: ['device/nx591j/**', '.github/workflows/nura-linux.yml']
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref_name == 'main' && 'integrate/nura-linux-nx591j' || github.sha }}
+          persist-credentials: false
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-cairo fonts-dejavu-core
+      - name: Rodar testes do NURA Linux
+        run: bash device/nx591j/tests/run_tests.sh
+      - name: Gerar previa do desktop
+        if: ${{ !cancelled() }}
+        run: |
+          python3 device/nx591j/src/nura_shell.py --mock
+          mkdir -p previews
+          cp /tmp/nura-shell.png previews/desktop.png
+      - name: Publicar previa
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nura-linux-previews
+          path: previews/
+          if-no-files-found: error
