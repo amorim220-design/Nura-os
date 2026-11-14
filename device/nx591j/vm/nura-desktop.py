@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Run the NURA Linux shell in a virtual machine window."""
+import os
+import sys
+import tempfile
+import time
+import tkinter as tk
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from nura_input import TouchEvent
+from nura_shell import DESK_H, DESK_W, NuraShell, _SimpleKey
+
+
+def main():
+    root = tk.Tk()
+    root.title("NURA OS")
+    root.attributes("-fullscreen", True)
+    view = tk.Label(root, background="black", borderwidth=0, highlightthickness=0)
+    view.pack(fill="both", expand=True)
+
+    with tempfile.TemporaryDirectory(prefix="nura-vm-") as work:
+        fb = Path(work) / "fb"
+        with fb.open("wb") as stream:
+            stream.truncate(4352 * 1920)
+
+        shell = NuraShell(mock=str(fb), input_device="")
+        if os.environ.get("NURA_VM_DEMO") == "1":
+            shell.open_app("terminal")
+
+        def touch(kind, event):
+            x = event.x * DESK_W // max(1, view.winfo_width())
+            y = event.y * DESK_H // max(1, view.winfo_height())
+            shell._dispatch(TouchEvent(kind, x, y, time=time.monotonic()))
+
+        def key(event):
+            if event.keysym == "Escape":
+                root.attributes("-fullscreen", False)
+                return
+            value = event.char if event.char and event.char.isprintable() else event.keysym
+            shell.on_key(_SimpleKey(value, text=event.char,
+                                    ctrl=bool(event.state & 4),
+                                    shift=bool(event.state & 1)))
+
+        def draw():
+            shell.tick()
+            output = Path(work) / "frame.png"
+            shell.surface.write_to_png(str(output))
+            frame = tk.PhotoImage(file=str(output))
+            if view.winfo_width() < DESK_W or view.winfo_height() < DESK_H:
+                frame = frame.subsample(2)
+            view.configure(image=frame)
+            view.image = frame
+            root.after(125, draw)
+
+        view.bind("<ButtonPress-1>", lambda e: touch("down", e))
+        view.bind("<B1-Motion>", lambda e: touch("move", e))
+        view.bind("<ButtonRelease-1>", lambda e: touch("up", e))
+        root.bind("<KeyPress>", key)
+        root.after(0, draw)
+        try:
+            root.mainloop()
+        finally:
+            shell.fb.close()
+
+
+if __name__ == "__main__":
+    main()
