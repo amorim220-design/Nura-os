@@ -36,3 +36,38 @@ jobs:
           name: nura-linux-previews
           path: previews/
           if-no-files-found: error
+  install-arm64:
+    name: Instalar e abrir no Alpine ARM64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref_name == 'main' && 'integrate/nura-linux-nx591j' || github.sha }}
+          persist-credentials: false
+      - name: Instalar em ambiente Alpine descartavel
+        run: |
+          mkdir -p install-preview
+          docker run --rm \
+            --mount "type=bind,src=$PWD/device/nx591j,dst=/source,readonly" \
+            --mount "type=bind,src=$PWD/install-preview,dst=/output" \
+            alpine:edge sh -euxc '
+              test "$(uname -m)" = aarch64
+              apk update
+              apk add --no-cache font-dejavu
+              cd /tmp
+              sh /source/packaging/install-nura.sh
+              test -x /etc/init.d/nura-shell
+              test -x /usr/bin/nura-recovery
+              test -s /usr/share/nura/assets/splash/frame_0001.png
+              adduser -D nura
+              su nura -s /bin/sh -c "/usr/bin/python3 -B /usr/share/nura/src/nura_shell.py --mock"
+              cp /tmp/nura-shell.png /output/desktop-instalado.png
+              test -s /output/desktop-instalado.png
+            '
+      - name: Publicar desktop instalado
+        uses: actions/upload-artifact@v4
+        with:
+          name: nura-linux-alpine-arm64
+          path: install-preview/
+          if-no-files-found: error
