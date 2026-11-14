@@ -34,6 +34,11 @@ packages:
   - python3-pil.imagetk
   - fonts-dejavu-core
 write_files:
+  - path: /usr/local/bin/nura-vm-session
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      exec /usr/sbin/runuser -u nura -- /usr/bin/python3 -B /opt/nura/vm/nura-desktop.py
   - path: /etc/systemd/system/nura-vm.service
     permissions: '0644'
     content: |
@@ -44,7 +49,9 @@ write_files:
       [Service]
       RuntimeDirectory=nura-vm
       ExecStartPre=/usr/bin/chown nura:nura /run/nura-vm
-      ExecStart=/usr/bin/xinit /usr/sbin/runuser -u nura -- /usr/bin/python3 -B /opt/nura/vm/nura-desktop.py -- /usr/bin/Xorg :0 vt7 -keeptty -nolisten tcp -ac
+      ExecStart=/usr/bin/xinit /usr/local/bin/nura-vm-session -- /usr/bin/Xorg :0 vt7 -keeptty -nolisten tcp -ac
+      StandardOutput=journal+console
+      StandardError=journal+console
       ExecStartPost=/bin/sh -c 'for i in $(seq 1 60); do if [ -f /run/nura-vm/ready ]; then echo NURA_VM_READY > /dev/ttyS0; exit 0; fi; sleep 1; done; exit 1'
 
       [Install]
